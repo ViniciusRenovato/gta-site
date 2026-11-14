@@ -168,28 +168,84 @@
       color: #fff;
     }
 
-    .music-toggle {
+    .music-control {
       position: fixed;
       right: 16px;
       bottom: 16px;
       z-index: 10;
-      width: 40px;
+      display: flex;
+      align-items: center;
       height: 40px;
-      padding: 0;
       border: 1px solid #ffffff27;
+      border-radius: 20px;
+      background: #110e20d9;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+
+    .music-control:hover,
+    .music-control:focus-within {
+      opacity: 1;
+    }
+
+    .music-toggle {
+      flex: none;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      border: 0;
       border-radius: 50%;
       color: white;
       font-size: 17px;
       line-height: 1;
-      background: #110e20d9;
-      opacity: 0.6;
+      background: transparent;
       cursor: pointer;
-      transition: opacity 0.2s;
     }
 
-    .music-toggle:hover,
-    .music-toggle:focus-visible {
+    .music-panel {
+      display: flex;
+      align-items: center;
+      max-width: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-width 0.25s, opacity 0.2s;
+    }
+
+    .music-control:hover .music-panel,
+    .music-control:focus-within .music-panel {
+      max-width: 280px;
       opacity: 1;
+    }
+
+    .music-btn {
+      flex: none;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: white;
+      font-size: 14px;
+      line-height: 1;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .music-btn:first-child {
+      margin-left: 6px;
+    }
+
+    .music-btn:hover,
+    .music-btn:focus-visible {
+      background: #ffffff1f;
+    }
+
+    .music-volume {
+      flex: none;
+      width: 90px;
+      margin: 0 8px 0 6px;
+      accent-color: #ff67ba;
+      cursor: pointer;
     }
 
     .footer {
@@ -300,20 +356,48 @@
     </div>
   </main>
 
-  <audio id="music" loop preload="auto" aria-label="Flower in a Hurricane">
-    <source
-          src="Justice%20-%20Flower%20In%20A%20Hurricane%20%28ft%20Tame%20Impala%2C%20SZA%2C%20King%20Gizzard%20%26%20the%20Lizard%20Wizard%29%20%5Bfrom%20GTAVI%5D.mp3"
-          type="audio/mpeg"
-        >
-        Seu navegador não conseguiu carregar o arquivo MP3.
-  </audio>
-  <button
-    id="musicToggle"
-    class="music-toggle"
-    type="button"
-    aria-label="Tocar música"
-    title="Flower in a Hurricane"
-  >🔇</button>
+  <audio id="music" preload="auto"></audio>
+
+  <div class="music-control" id="musicControl">
+    <div class="music-panel">
+      <button
+        id="musicPrev"
+        class="music-btn"
+        type="button"
+        aria-label="Música anterior"
+        title="Anterior"
+      >⏮</button>
+      <button
+        id="musicPlay"
+        class="music-btn"
+        type="button"
+        aria-label="Tocar"
+        title="Pausar / tocar"
+      >▶</button>
+      <button
+        id="musicNext"
+        class="music-btn"
+        type="button"
+        aria-label="Próxima música"
+        title="Próxima"
+      >⏭</button>
+      <input
+        id="musicVolume"
+        class="music-volume"
+        type="range"
+        min="0"
+        max="100"
+        value="60"
+        aria-label="Volume da música"
+      >
+    </div>
+    <button
+      id="musicToggle"
+      class="music-toggle"
+      type="button"
+      aria-label="Tocar música"
+    >🔇</button>
+  </div>
 
   <script>
     const $ = (id) => document.getElementById(id);
@@ -597,21 +681,75 @@
     });
     restartTimer();
 
-    // Áudio: tenta tocar já; se o navegador bloquear, toca no primeiro gesto.
-    // O botão no canto alterna entre tocar e pausar.
+    // ===== Música =====
+    // Pasta (dentro da pasta do site) e lista das músicas, na ordem de reprodução.
+    // Os nomes precisam ser idênticos aos dos arquivos, inclusive maiúsculas.
+    const GTAVI_Sounds = "GTAVI_Sounds";
+    const playlist = [
+      "Justice - Flower In A Hurricane (ft Tame Impala, SZA, King Gizzard & the Lizard Wizard) [from GTAVI].mp3",
+      "Tom Petty - Love Is A Long Road (Official Audio).mp3",
+      "The Pointer Sisters - Hot Together (Official Audio).mp3",
+    ];
+
     (function setupMusic() {
       const audio = $("music");
       const toggle = $("musicToggle");
-      if (!audio || !toggle) return;
+      const volume = $("musicVolume");
+      const prevBtn = $("musicPrev");
+      const playBtn = $("musicPlay");
+      const nextBtn = $("musicNext");
+      if (!audio || !toggle || !volume || !prevBtn || !playBtn || !nextBtn) {
+        return;
+      }
+
       const events = ["pointerdown", "keydown", "touchstart"];
+      let trackIndex = 0;
+      let consecutiveErrors = 0;
+
+      function trackUrl(file) {
+        return [GTAVI_Sounds, file]
+          .map((part) => encodeURIComponent(part))
+          .join("/");
+      }
+
+      function loadTrack(index) {
+        trackIndex = (index + playlist.length) % playlist.length;
+        audio.src = trackUrl(playlist[trackIndex]);
+        toggle.title = "♪ " + playlist[trackIndex].replace(/\.[^.]+$/, "");
+      }
+
+      function nextTrack() {
+        loadTrack(trackIndex + 1);
+        audio.play().catch(() => {});
+      }
+
+      function prevTrack() {
+        // Estilo player: passou de 3s, volta ao começo; senão, música anterior
+        if (audio.currentTime > 3) {
+          audio.currentTime = 0;
+        } else {
+          loadTrack(trackIndex - 1);
+        }
+        audio.play().catch(() => {});
+      }
+
+      function togglePlay() {
+        if (audio.paused) {
+          audio.play().catch(() => {});
+        } else {
+          audio.pause();
+        }
+      }
 
       function syncButton() {
         const playing = !audio.paused;
-        toggle.textContent = playing ? "🔊" : "🔇";
+        toggle.textContent = playing && audio.volume > 0 ? "🔊" : "🔇";
         toggle.setAttribute(
           "aria-label",
           playing ? "Pausar música" : "Tocar música",
         );
+        playBtn.textContent = playing ? "⏸" : "▶";
+        playBtn.setAttribute("aria-label", playing ? "Pausar" : "Tocar");
       }
 
       function removeListeners() {
@@ -619,23 +757,57 @@
       }
 
       function startOnGesture(event) {
-        // Cliques no botão são tratados pelo próprio botão
-        if (event.target.closest && event.target.closest("#musicToggle")) return;
+        // Cliques no controle são tratados pelos próprios botões
+        if (event.target.closest && event.target.closest("#musicControl")) {
+          return;
+        }
         audio.play().then(removeListeners).catch(() => {});
       }
 
-      audio.addEventListener("play", syncButton);
-      audio.addEventListener("pause", syncButton);
-
-      toggle.addEventListener("click", () => {
-        removeListeners();
-        if (audio.paused) {
-          audio.play().catch(() => {});
-        } else {
-          audio.pause();
-        }
+      // Volume
+      audio.volume = volume.value / 100;
+      volume.addEventListener("input", () => {
+        audio.volume = volume.value / 100;
       });
 
+      // Estado dos botões
+      audio.addEventListener("play", syncButton);
+      audio.addEventListener("pause", syncButton);
+      audio.addEventListener("volumechange", syncButton);
+
+      // Ao terminar uma música, vai para a próxima (e volta à primeira no fim)
+      audio.addEventListener("ended", nextTrack);
+      audio.addEventListener("playing", () => {
+        consecutiveErrors = 0;
+      });
+
+      // Arquivo ausente ou nome errado: pula para a próxima
+      audio.addEventListener("error", () => {
+        console.error(`Não foi possível carregar a música: ${playlist[trackIndex]}`);
+        consecutiveErrors += 1;
+        if (consecutiveErrors < playlist.length) nextTrack();
+      });
+
+      // Botões
+      toggle.addEventListener("click", () => {
+        removeListeners();
+        togglePlay();
+      });
+      playBtn.addEventListener("click", () => {
+        removeListeners();
+        togglePlay();
+      });
+      prevBtn.addEventListener("click", () => {
+        removeListeners();
+        prevTrack();
+      });
+      nextBtn.addEventListener("click", () => {
+        removeListeners();
+        nextTrack();
+      });
+
+      // Tenta tocar já; se o navegador bloquear, toca no primeiro gesto
+      loadTrack(0);
       const attempt = audio.play();
       if (attempt && typeof attempt.catch === "function") {
         attempt.catch(() => {
